@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 Load data
 ```{r}
-setwd("~/Documents/TDP control files/Longitudinal induction analysis/NOR/")
+#setwd("~/Documents/TDP control files/Longitudinal induction analysis/NOR/")
 # Loading
 library(pacman)
 p_load(readxl, tidyverse)
@@ -214,4 +214,117 @@ qqline(ranef(m_anova)$ID[,1])
 plot(df$Week, fitted(m_anova))
 
 
+```
+
+
+# T-test
+
+Data set where participants not completing all data collection time points are sorted out
+```{r}
+# Filter out so data is only for the first two weeks
+TwoWeeks_df <- df %>% filter(Week == "Preinduction" | Week == "1st week post induction")
+
+```
+
+#Filter out subjects that did not complete
+```{r}
+
+# Determine the weeks each participant should have
+required_weeks <- TwoWeeks_df %>% 
+  distinct(Week) %>% 
+  pull()
+
+# Count the number of weeks each participant has data for
+participant_week_counts <- TwoWeeks_df %>%
+  group_by(ID) %>%
+  summarize(week_count = n_distinct(Week))
+
+# Identify participants with data for all required weeks
+complete_participants <- participant_week_counts %>%
+  filter(week_count == length(required_weeks)) %>%
+  pull(ID)
+
+# Filter the dataset to include only complete participants
+df_complete <- TwoWeeks_df %>%
+  filter(ID %in% complete_participants)
+
+# View the new dataset
+head(df_complete)
+```
+
+```{r}
+df_complete$ID <- as.factor(df_complete$ID)
+df_complete$Week <- factor(df_complete$Week , levels = c("Preinduction","1st week post induction"))
+
+```
+
+```{r}
+Identical_cond <-  df_complete %>% filter(Condition == "Hab")
+Novel_cond<-  df_complete %>% filter(Condition == "NovRGHT"| Condition =="NovLFT")
+
+```
+
+
+```{r}
+Novel_left <-  df_complete %>% filter(Condition =="NovLFT")
+Novel_right<-  df_complete %>% filter(Condition == "NovRGHT")
+
+
+# calculating DR_ index as (time novel  / (time novel + time familiar)*100)
+
+Novel_right<- Novel_right %>% mutate(DR_index=((Novel_right$`In zone ContactZone_right  cumulative s`/(Novel_right$`In zone ContactZone_right  cumulative s`+Novel_right$`In zone ContactZone_left cumulative s`))*100))
+Novel_left<- Novel_left %>% mutate(DR_index=((Novel_left$`In zone ContactZone_left cumulative s`/(Novel_left$`In zone ContactZone_left cumulative s`+Novel_left$`In zone ContactZone_right  cumulative s`))*100))
+
+df2 <- rbind(Novel_left,Novel_right)
+
+```
+
+
+
+## novelty preference
+```{r}
+
+by(df2$DR_index, df2$Week, shapiro.test)
+
+# Perform paired t-test
+t_test_result <- t.test(DR_index ~ Week, data = df2, paired = TRUE)
+
+# Print the result of the t-test
+print(t_test_result)
+
+# Extract the p-value from the test result
+p_value <- t_test_result$p.value
+```
+
+```{r}
+# Function to convert p-value to significance annotations
+get_significance_label <- function(p_value) {
+  if (p_value < 0.001) {
+    return("***")
+  } else if (p_value < 0.01) {
+    return("**")
+  } else if (p_value < 0.05) {
+    return("*")
+  } else {
+    return("ns")
+  }
+}
+```
+
+
+```{r}
+p_load(ggbeeswarm, ggsignif)
+# Get the significance label for the paired t-test p-value
+significance_label <- get_significance_label(p_value)
+
+ggplot(df2, aes(x = Week, y = DR_index)) +
+  geom_beeswarm(data = df2, size = 2.5, aes(color = ID)) +
+  ylab("DR_index (novelty preference)") +
+  xlab("Timepoint") +
+  geom_signif(comparisons = list(c("Preinduction", "1st week post induction")),
+              map_signif_level = TRUE,
+              annotations = significance_label) +
+  geom_crossbar(stat = "summary", fun = mean, width = 0.2, fatten = 1.5) +
+  geom_errorbar(data = df2, stat = "summary", fun.data = mean_se, width = 0.1, position = "dodge") +
+  theme(text = element_text(size = 13))
 ```

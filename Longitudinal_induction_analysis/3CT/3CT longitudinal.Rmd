@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 Load data
 ```{r}
-setwd("~/Documents/TDP control files/Longitudinal induction analysis/3CT/")
+#setwd("~/Documents/TDP control files/Longitudinal induction analysis/3CT/")
 # Loading
 library(pacman)
 p_load(readxl, tidyverse)
@@ -504,4 +504,154 @@ ggplot(novelty_cond, aes(x = Week, y = novelty_preference_relative)) +
   geom_errorbar(data = novelty_cond, stat = "summary", fun.data = mean_se, width = 0.1, position = "dodge") +
   theme(text = element_text(size = 13))
 
+```
+
+
+
+# T-test
+
+Data set where participants not completing all data collection time points are sorted out
+```{r}
+# Filter out so data is only for the first two weeks
+TwoWeeks_df <- df %>% filter(Week == "Preinduction" | Week == "1st week post induction")
+
+```
+
+#Filter out subjects that did not complete
+```{r}
+
+# Determine the weeks each participant should have
+required_weeks <- TwoWeeks_df %>% 
+  distinct(Week) %>% 
+  pull()
+
+# Count the number of weeks each participant has data for
+participant_week_counts <- TwoWeeks_df %>%
+  group_by(ID) %>%
+  summarize(week_count = n_distinct(Week))
+
+# Identify participants with data for all required weeks
+complete_participants <- participant_week_counts %>%
+  filter(week_count == length(required_weeks)) %>%
+  pull(ID)
+
+# Filter the dataset to include only complete participants
+df_complete <- TwoWeeks_df %>%
+  filter(ID %in% complete_participants)
+
+# View the new dataset
+head(df_complete)
+```
+
+```{r}
+df_complete$ID <- as.factor(df_complete$ID)
+df_complete$Week <- factor(df_complete$Week , levels = c("Preinduction","1st week post induction"))
+
+```
+
+
+
+Divide dataset up into Habituation, social, and novelty phases
+
+```{r}
+habituation_cond <-  df_complete %>% filter(Condition == "Hab")
+social_cond<-  df_complete %>% filter(Condition == "Social")
+novelty_cond<-  df_complete %>% filter(Condition == "Novel")
+
+```
+
+
+```{r}
+
+habituation_cond <- habituation_cond %>% mutate(social_preference_relative=((`In zone SocialZone cumulative s`-`In zone NoveltyZone cumulative s`)/(`In zone NoveltyZone cumulative s`+`In zone SocialZone cumulative s`)))
+
+
+#As described in Baronio 2015 
+#https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0116363&type=printable 
+
+social_cond <- social_cond %>% mutate(social_preference_relative=((`In zone SocialZone cumulative s`-`In zone NoveltyZone cumulative s`)/(`In zone NoveltyZone cumulative s`+`In zone SocialZone cumulative s`)))
+
+novelty_cond <- novelty_cond %>% mutate(novelty_preference_relative=((`In zone NoveltyZone cumulative s`-`In zone SocialZone cumulative s`)/(`In zone SocialZone cumulative s`+`In zone NoveltyZone cumulative s`)))
+
+```
+
+## Social preference 
+```{r}
+
+by(social_cond$social_preference_relative, social_cond$Week, shapiro.test)
+
+# Perform paired t-test
+t_test_result <- t.test(social_preference_relative ~ Week, data = social_cond, paired = TRUE)
+
+# Print the result of the t-test
+print(t_test_result)
+
+# Extract the p-value from the test result
+p_value <- t_test_result$p.value
+```
+
+```{r}
+# Function to convert p-value to significance annotations
+get_significance_label <- function(p_value) {
+  if (p_value < 0.001) {
+    return("***")
+  } else if (p_value < 0.01) {
+    return("**")
+  } else if (p_value < 0.05) {
+    return("*")
+  } else {
+    return("ns")
+  }
+}
+```
+
+
+```{r}
+p_load(ggbeeswarm, ggsignif)
+# Get the significance label for the paired t-test p-value
+significance_label <- get_significance_label(p_value)
+
+ggplot(social_cond, aes(x = Week, y = social_preference_relative)) +
+  geom_beeswarm(data = social_cond, size = 2.5, aes(color = ID)) +
+  ylab("social preference") +
+  xlab("Timepoint") +
+  geom_signif(comparisons = list(c("Preinduction", "1st week post induction")),
+              map_signif_level = TRUE,
+              annotations = significance_label) +
+  geom_crossbar(stat = "summary", fun = mean, width = 0.2, fatten = 1.5) +
+  geom_errorbar(data = social_cond, stat = "summary", fun.data = mean_se, width = 0.1, position = "dodge") +
+  theme(text = element_text(size = 13))
+```
+
+
+## novelty preference 
+```{r}
+
+by(novelty_cond$novelty_preference_relative, novelty_cond$Week, shapiro.test)
+
+# Perform paired t-test
+t_test_result <- t.test(novelty_preference_relative ~ Week, data = novelty_cond, paired = TRUE)
+
+# Print the result of the t-test
+print(t_test_result)
+
+# Extract the p-value from the test result
+p_value <- t_test_result$p.value
+```
+
+```{r}
+p_load(ggbeeswarm, ggsignif)
+# Get the significance label for the paired t-test p-value
+significance_label <- get_significance_label(p_value)
+
+ggplot(novelty_cond, aes(x = Week, y = novelty_preference_relative)) +
+  geom_beeswarm(data = novelty_cond, size = 2.5, aes(color = ID)) +
+  ylab("Novelty preference") +
+  xlab("Timepoint") +
+  geom_signif(comparisons = list(c("Preinduction", "1st week post induction")),
+              map_signif_level = TRUE,
+              annotations = significance_label) +
+  geom_crossbar(stat = "summary", fun = mean, width = 0.2, fatten = 1.5) +
+  geom_errorbar(data = novelty_cond, stat = "summary", fun.data = mean_se, width = 0.1, position = "dodge") +
+  theme(text = element_text(size = 13))
 ```

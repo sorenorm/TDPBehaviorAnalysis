@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 Load data
 ```{r}
-setwd("~/Documents/TDP control files/Longitudinal induction analysis/LDCT/")
+#setwd("~/Documents/TDP control files/Longitudinal induction analysis/LDCT/")
 # Loading
 library(pacman)
 p_load(readxl, tidyverse)
