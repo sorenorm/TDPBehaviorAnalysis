@@ -1,0 +1,440 @@
+---
+title: "3CT"
+output:
+  pdf_document: default
+  html_document: default
+date: '2022-12-02'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load data
+```{r}
+setwd("~/Documents/TDP control files/Control study/")
+# Loading
+library(pacman)
+p_load(readxl, tidyverse)
+p_load(broom, ggsignif, multcomp, emmeans, DescTools)
+# xlsx files
+df <- read_excel("3CT_controls.xlsx")
+
+
+```
+
+
+Assign genotypes
+```{r}
+df$Genotype <- 0
+
+
+df$Genotype <- ifelse(df$ID==82, 'TDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==84, 'TDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==107, 'TDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==109, 'TDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==80, 'WT', df$Genotype)
+df$Genotype <- ifelse(df$ID==86, 'WT', df$Genotype)
+df$Genotype <- ifelse(df$ID==115, 'WT', df$Genotype)
+df$Genotype <- ifelse(df$ID==117, 'WT', df$Genotype)
+df$Genotype <- ifelse(df$ID==74, 'NEFH-tTA', df$Genotype)
+df$Genotype <- ifelse(df$ID==76, 'NEFH-tTA', df$Genotype)
+df$Genotype <- ifelse(df$ID==119, 'NEFH-tTA', df$Genotype)
+df$Genotype <- ifelse(df$ID==121, 'NEFH-tTA', df$Genotype)
+df$Genotype <- ifelse(df$ID==129, 'NEFH-tTAxTDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==137, 'NEFH-tTAxTDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==141, 'NEFH-tTAxTDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==98, 'NEFH-tTAxTDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==102, 'NEFH-tTAxTDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==112, 'NEFH-tTAxTDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==120, 'NEFH-tTAxTDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==124, 'NEFH-tTAxTDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==128, 'NEFH-tTAxTDP', df$Genotype)
+
+df$Genotype <- factor(df$Genotype, levels = c("WT", "NEFH-tTA", "TDP", "NEFH-tTAxTDP"))
+
+```
+
+We will primarily analyse time spent in the different zones. We expect:
+
+Habituation phase: time spent in neutral, social, and novel zone will be equal.
+For social phase (1 mouse introduced): time spent in social will be bigger than neutral and novel zone combined.
+for novelty phase (1 novel mouse introduced into novelty zone): time spent in novelty zone will be bigger then in neutral and social zone combined.
+
+
+Divide dataset up into Habituation, social, and novelty phases
+
+```{r}
+habituation_cond <-  df %>% filter(Condition == "Hab")
+social_cond<-  df %>% filter(Condition == "Social")
+novelty_cond<-  df %>% filter(Condition == "Novel")
+```
+
+
+```{r}
+
+habituation_cond <- habituation_cond %>% mutate(social_preference_relative=((`In zone SocialZone cumulative s`-`In zone NoveltyZone cumulative s`)/(`In zone NoveltyZone cumulative s`+`In zone SocialZone cumulative s`)))
+
+
+#As described in Baronio 2015 
+#https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0116363&type=printable 
+
+social_cond <- social_cond %>% mutate(social_preference_relative=((`In zone SocialZone cumulative s`-`In zone NoveltyZone cumulative s`)/(`In zone NoveltyZone cumulative s`+`In zone SocialZone cumulative s`)))
+
+novelty_cond <- novelty_cond %>% mutate(novelty_preference_relative=((`In zone NoveltyZone cumulative s`-`In zone SocialZone cumulative s`)/(`In zone SocialZone cumulative s`+`In zone NoveltyZone cumulative s`)))
+
+```
+
+
+
+testing by genotype:
+
+Dunnet tests
+
+```{r}
+###Relative preference
+anova_social_preference_relative <- aov(social_preference_relative ~ Genotype, data = social_cond)
+summary(anova_social_preference_relative)
+
+#Dunnet's post hoc
+emmeans(anova_social_preference_relative ,specs = trt.vs.ctrl~ Genotype)
+```
+
+
+```{r}
+color_palette = c("#5B1A18","#D67236","#FD6467", "#F1BB7B")
+```
+
+Preparing the ggsignif function to use Dunnet's p-values
+```{r}
+
+stars <- function(p) {
+  case_when(
+    p <= 0.001 ~ "***",
+    p <= 0.01  ~ "**",
+    p <= 0.05  ~ "*",
+    TRUE       ~ "ns"
+  )
+}
+
+```
+
+```{r}
+
+Dunnet<- glht(anova_social_preference_relative, mcp(Genotype = "Dunnet")) %>%tidy() %>% 
+  mutate(contrast = str_split(contrast, " - "),
+         stars    = stars(adj.p.value))
+
+
+ggplot(data= social_cond, aes(x=Genotype, y=social_preference_relative)) +
+  ylab("Sociability Index")+
+  geom_bar(stat = "summary",fun=mean, aes(color = Genotype,fill=Genotype), alpha = 0.01, size=1) +
+  geom_errorbar(stat="summary", fun.data=mean_se, width = 0.4, position = "dodge")+
+  theme(panel.background = element_rect(fill = "white"), axis.line = element_line(color="black"))+ 
+  theme(text = element_text(family = "Times New Roman"))+
+  scale_color_manual(values=color_palette)+
+  scale_fill_manual(values=color_palette)+
+  geom_jitter(position = position_jitter(width = .2),alpha=0.6) +
+    theme(axis.title.x=element_blank(),  text = element_text(size=15),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())+
+      ggsignif::geom_signif(family = "Times New Roman",
+    comparisons = Dunnet$contrast,
+    annotations = Dunnet$stars,
+    y_position = c(1.2, 1.1,1)
+  )
+```
+Social novelty
+
+```{r}
+
+###Relative preference
+anova_novel_preference_relative <- aov(novelty_preference_relative ~ Genotype, data = novelty_cond)
+summary(anova_novel_preference_relative)
+
+#Dunnet's post hoc
+DunnettTest(x=novelty_cond$novelty_preference_relative, g=novelty_cond$Genotype)
+
+```
+
+
+```{r}
+
+Dunnet<- glht(anova_novel_preference_relative, mcp(Genotype = "Dunnet")) %>%tidy() %>% 
+  mutate(contrast = str_split(contrast, " - "),
+         stars    = stars(adj.p.value))
+
+
+ggplot(data= novelty_cond, aes(x=Genotype, y=novelty_preference_relative)) +
+  ylab("Social Novelty Preference Index")+
+  geom_bar(stat = "summary",fun=mean, aes(color = Genotype,fill=Genotype), alpha = 0.01, size=1) +
+  geom_errorbar(stat="summary", fun.data=mean_se, width = 0.4, position = "dodge")+
+  theme(panel.background = element_rect(fill = "white"), axis.line = element_line(color="black"))+ 
+  theme(text = element_text(family = "Times New Roman"))+
+  scale_color_manual(values=color_palette)+
+  scale_fill_manual(values=color_palette)+
+  geom_jitter(position = position_jitter(width = .2),alpha=0.6) +
+    theme(axis.title.x=element_blank(),  text = element_text(size=15),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())+
+      ggsignif::geom_signif(family = "Times New Roman",
+    comparisons = Dunnet$contrast,
+    annotations = Dunnet$stars,
+    y_position = c(0.65,0.55,0.45)
+  )
+```
+
+Tukey tests
+
+Test genotype differences - social preference
+
+
+#assumption tests
+
+```{r}
+p_load(car)
+
+#Independence
+#Should be okay
+
+#outliers - 3, one is extreme
+p_load(rstatix)
+outliers <- social_cond %>%
+  group_by(Genotype) %>%
+  identify_outliers(social_preference_relative)
+
+#normality - TDP distribution significant
+by(social_cond$social_preference_relative, social_cond$Genotype, shapiro.test)
+
+#Homogeneity of variance - holds
+leveneTest(social_cond$social_preference_relative, social_cond$Genotype, center = mean)
+bartlett.test(social_preference_relative ~Genotype, data=social_cond)
+
+kruskal.test(social_preference_relative ~ Genotype, 
+             data = social_cond)
+
+dunnTest(social_preference_relative ~ Genotype, 
+             data = social_cond,
+         method="bonferroni")
+```
+
+```{r}
+
+###Relative preference
+anova_social_preference_relative <- aov(social_preference_relative ~ Genotype, data = social_cond)
+summary(anova_social_preference_relative)
+
+#Dunnet's post hoc
+emmeans(anova_social_preference_relative ,specs = trt.vs.ctrl~ Genotype)
+
+#Tukey
+TukeyHSD(anova_social_preference_relative, conf.level = 0.95)
+
+emm<-emmeans(anova_social_preference_relative, pairwise ~ Genotype, conf.level = 0.95)
+emm
+s_emm<- as.data.frame(test(emm)[2])
+
+Tukey_social <- TukeyHSD(anova_social_preference_relative, conf.level = 0.95)
+s_df<- as.data.frame(Tukey_social[1])
+colnames(s_df) <- c('Mean difference','CI lower','CI upper', 'Adjusted p value')
+
+s_emm
+s_df
+s_df$SE <- s_emm$contrasts.SE
+s_df <- s_df[, c("Mean difference", "SE",'CI lower','CI upper', 'Adjusted p value')]
+
+```
+
+Make nice table of results
+```{r}
+#caption = "<center><strong>CENTER</strong></center>"
+p_load(knitr, kableExtra)
+s_df %>% kable("html", digits=4,caption = "<center>Sociability Index</center>") %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, html_font = "Times New Roman" )
+
+
+```
+
+
+```{r}
+
+###Relative preference
+anova_social_preference_relative <- aov(social_preference_relative ~ Genotype, data = social_cond)
+summary(anova_social_preference_relative)
+
+#Tukey
+TukeyHSD(anova_social_preference_relative, conf.level = 0.95)
+
+emm<-emmeans(anova_social_preference_relative, pairwise ~ Genotype, conf.level = 0.95)
+emm
+s_emm<- as.data.frame(test(emm)[2])
+
+Tukey_social <- TukeyHSD(anova_social_preference_relative, conf.level = 0.95)
+s_df<- as.data.frame(Tukey_social[1])
+colnames(s_df) <- c('Mean difference','CI lower','CI upper', 'Adjusted p value')
+
+s_emm
+s_df
+s_df$SE <- s_emm$contrasts.SE
+s_df <- s_df[, c("Mean difference", "SE",'CI lower','CI upper', 'Adjusted p value')]
+
+```
+
+Make nice table of results
+```{r}
+#caption = "<center><strong>CENTER</strong></center>"
+p_load(knitr, kableExtra)
+s_df %>% kable("html", digits=4,caption = "<center>Sociability Index</center>") %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, html_font = "Times New Roman" )
+
+
+```
+
+
+##Plots
+
+
+Set color palette for plots
+
+For the plots, colors from the palette 'GrandBudapest1' from the 'wesanderson' package (Karthik Ram and Hadley Wickham (2018). wesanderson: A Wes Anderson Palette Generator. R package
+  version 0.3.6. https://CRAN.R-project.org/package=wesanderson) were used, but colors re-ordered so the darkest color was applied to the WT mice
+
+
+
+```{r}
+color_palette = c("#5B1A18","#D67236","#FD6467", "#F1BB7B")
+```
+
+Preparing the ggsignif function to use Dunnet's p-values
+```{r}
+
+stars <- function(p) {
+  case_when(
+    p <= 0.001 ~ "***",
+    p <= 0.01  ~ "**",
+    p <= 0.05  ~ "*",
+    TRUE       ~ "ns"
+  )
+}
+
+```
+
+```{r}
+
+
+Dunnet<- glht(anova_social_preference_relative, mcp(Genotype = "Tukey")) %>%tidy() %>% 
+  mutate(contrast = str_split(contrast, " - "),
+         stars    = stars(adj.p.value))
+
+ggplot(data= social_cond, aes(x=Genotype, y=social_preference_relative)) +
+  ylab("Sociability Index")+
+  geom_bar(stat = "summary",fun=mean, aes(color = Genotype,fill=Genotype), alpha = 0.01, size=1) +
+  geom_errorbar(stat="summary", fun.data=mean_se, width = 0.4, position = "dodge")+
+  theme(panel.background = element_rect(fill = "white"), axis.line = element_line(color="black"))+ 
+  theme(text = element_text(family = "Times New Roman"))+
+  scale_color_manual(values=color_palette)+
+  scale_fill_manual(values=color_palette)+
+  geom_jitter(position = position_jitter(width = .2),alpha=0.6) +
+    theme(axis.title.x=element_blank(),  text = element_text(size=15),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())+
+      ggsignif::geom_signif(family = "Times New Roman",
+    comparisons = Dunnet$contrast,
+    annotations = Dunnet$stars,
+    y_position = c(1.5,1.4,1.3,1.2, 1.1,1)
+  )
+```
+
+
+
+Test genotype differences - novelty preference
+
+
+#assumption tests
+
+```{r}
+p_load(car)
+
+#Independence
+#Should be okay
+
+#outliers - 0
+p_load(rstatix)
+outliers <- novelty_cond %>%
+  group_by(Genotype) %>%
+  identify_outliers(novelty_preference_relative)
+
+#normality - holds
+by(novelty_cond$novelty_preference_relative, social_cond$Genotype, shapiro.test)
+
+#Homogeneity of variance - holds
+leveneTest(novelty_cond$novelty_preference_relative, novelty_cond$Genotype, center = mean)
+bartlett.test(novelty_preference_relative ~Genotype, data=novelty_cond)
+
+#kruskal.test(novelty_preference_relative ~ Genotype, 
+         #    data = novelty_cond)
+```
+
+
+```{r}
+
+###Relative preference
+anova_novel_preference_relative <- aov(novelty_preference_relative ~ Genotype, data = novelty_cond)
+summary(anova_novel_preference_relative)
+
+#Dunnet's post hoc
+emmeans(anova_novel_preference_relative ,specs = trt.vs.ctrl~ Genotype)
+
+
+#Tukey
+TukeyHSD(anova_novel_preference_relative, conf.level = 0.95)
+
+emm<-emmeans(anova_novel_preference_relative, pairwise ~ Genotype, conf.level = 0.95)
+emm
+sn_emm<- as.data.frame(test(emm)[2])
+
+Tukey_social_novelty <- TukeyHSD(anova_novel_preference_relative, conf.level = 0.95)
+sn_df<- as.data.frame(Tukey_social_novelty[1])
+colnames(sn_df) <- c('Mean difference','CI lower','CI upper', 'Adjusted p value')
+
+sn_emm
+sn_df
+sn_df$SE <- sn_emm$contrasts.SE
+sn_df <- sn_df[, c("Mean difference", "SE",'CI lower','CI upper', 'Adjusted p value')]
+
+```
+
+
+Make nice table of results
+```{r}
+p_load(knitr, kableExtra)
+sn_df %>% kable("html", digits=4, caption = "<center>Social Novelty Preference Index</center>") %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, html_font = "Times New Roman")
+
+```
+
+
+```{r}
+
+Dunnet<- glht(anova_novel_preference_relative, mcp(Genotype = "Tukey")) %>%tidy() %>% 
+  mutate(contrast = str_split(contrast, " - "),
+         stars    = stars(adj.p.value))
+
+ggplot(data= novelty_cond, aes(x=Genotype, y=novelty_preference_relative)) +
+  ylab("Social Novelty Preference Index")+
+  geom_bar(stat = "summary",fun=mean, aes(color = Genotype,fill=Genotype), alpha = 0.01, size=1) +
+  geom_errorbar(stat="summary", fun.data=mean_se, width = 0.4, position = "dodge")+
+  theme(panel.background = element_rect(fill = "white"), axis.line = element_line(color="black"))+ 
+  theme(text = element_text(family = "Times New Roman"))+
+  scale_color_manual(values=color_palette)+
+  scale_fill_manual(values=color_palette)+
+  geom_jitter(position = position_jitter(width = .2),alpha=0.6) +
+    theme(axis.title.x=element_blank(),  text = element_text(size=15),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())+
+      ggsignif::geom_signif(family = "Times New Roman",
+    comparisons = Dunnet$contrast,
+    annotations = Dunnet$stars,
+    y_position = c(1.5,1.4,1.3,1.2, 1.1,1)
+  )
+```

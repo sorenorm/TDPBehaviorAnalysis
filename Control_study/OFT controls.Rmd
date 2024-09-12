@@ -1,0 +1,389 @@
+---
+title: "OFT"
+output:
+  pdf_document: default
+  html_document: default
+date: '2022-12-05'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Load data
+```{r}
+setwd("~/Documents/TDP control files/Control study/")
+# Loading
+library(pacman)
+p_load(readxl, tidyverse)
+p_load(broom, ggsignif, multcomp, emmeans, DescTools)
+# xlsx files
+df <- read_excel("OFT_controls.xlsx")
+
+```
+
+Assign genotypes
+```{r}
+df$Genotype <- 0
+
+df$Genotype <- ifelse(df$ID==82, 'TDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==84, 'TDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==107, 'TDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==109, 'TDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==80, 'WT', df$Genotype)
+df$Genotype <- ifelse(df$ID==86, 'WT', df$Genotype)
+df$Genotype <- ifelse(df$ID==115, 'WT', df$Genotype)
+df$Genotype <- ifelse(df$ID==117, 'WT', df$Genotype)
+df$Genotype <- ifelse(df$ID==74, 'NEFH-tTA', df$Genotype)
+df$Genotype <- ifelse(df$ID==76, 'NEFH-tTA', df$Genotype)
+df$Genotype <- ifelse(df$ID==119, 'NEFH-tTA', df$Genotype)
+df$Genotype <- ifelse(df$ID==121, 'NEFH-tTA', df$Genotype)
+df$Genotype <- ifelse(df$ID==129, 'NEFH-tTAxTDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==137, 'NEFH-tTAxTDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==141, 'NEFH-tTAxTDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==98, 'NEFH-tTAxTDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==102, 'NEFH-tTAxTDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==112, 'NEFH-tTAxTDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==120, 'NEFH-tTAxTDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==124, 'NEFH-tTAxTDP', df$Genotype)
+df$Genotype <- ifelse(df$ID==128, 'NEFH-tTAxTDP', df$Genotype)
+
+df$Genotype <- factor(df$Genotype, levels = c("WT", "NEFH-tTA", "TDP", "NEFH-tTAxTDP"))
+
+
+```
+
+We will look at two parameters:
+- how much time mouse spent moving (absolute and relative to total time) (measure of exploration)
+- how much time was spent on center compared to periphery (measure of anxiety, if anxious = more time spent in periphery)
+
+Time spent moving:
+```{r}
+# divide by time not spent moving
+df<-  df %>% mutate(relative_time_moving=(df$`Movement cumulative s`/(df$`Time not moving cumulative s`+df$`Movement cumulative s`))*100)
+```
+
+Periphery preference:
+
+```{r}
+df<-  df %>% mutate(periphery_preference=(`In zone periphery cumulative s`/(`In zone Center cumulative s`+`In zone periphery cumulative s`)*100))
+```
+
+
+Testing by genotype:
+
+
+comparing distance moved
+
+Used in  https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4354627/pdf/jove-96-52434.pdf paper from methods
+```{r}
+df$distance <- df$`Distance moved cm`
+
+anova_distance_moved <- aov(df$distance ~ Genotype, data = df)
+summary(anova_distance_moved )
+
+DunnettTest(x=df$distance, g=df$Genotype)
+
+```
+
+Comparing periphery preference
+
+
+```{r}
+
+anova_periphery_preference <- aov(periphery_preference ~ Genotype, data = df)
+summary(anova_periphery_preference)
+
+DunnettTest(x=df$periphery_preference, g=df$Genotype)
+
+```
+
+
+ 
+
+Plots
+
+Set color palette for plots
+
+For the plots, colors from the palette 'GrandBudapest1' from the 'wesanderson' package (Karthik Ram and Hadley Wickham (2018). wesanderson: A Wes Anderson Palette Generator. R package
+  version 0.3.6. https://CRAN.R-project.org/package=wesanderson) were used, but colors re-ordered so the darkest color was applied to the WT mice
+```{r}
+color_palette = c("#5B1A18","#D67236","#FD6467", "#F1BB7B")
+```
+
+
+Preparing the ggsignif function to use Dunnet's p-values
+```{r}
+
+stars <- function(p) {
+  case_when(
+    p <= 0.001 ~ "***",
+    p <= 0.01  ~ "**",
+    p <= 0.05  ~ "*",
+    TRUE       ~ "ns"
+  )
+}
+
+```
+
+Periphery preference
+
+```{r}
+
+Dunnet<- glht(anova_periphery_preference, mcp(Genotype = "Dunnet")) %>%tidy() %>% 
+  mutate(contrast = str_split(contrast, " - "),
+         stars    = stars(adj.p.value))
+
+ggplot(data= df, aes(x=Genotype, y=periphery_preference)) +
+  geom_bar(stat = "summary",fun=mean, aes(color = Genotype,fill=Genotype), alpha = 0.01, size=1) +
+  geom_errorbar(stat="summary", fun.data=mean_se, width = 0.4, position = "dodge")+
+  theme(panel.background = element_rect(fill = "white"), axis.line = element_line(color="black"))+ 
+  theme(text = element_text(family = "Times New Roman"))+
+  ylab("Periphery Time Percentage")+
+  scale_color_manual(values=color_palette)+
+  scale_fill_manual(values=color_palette)+
+  geom_jitter(position = position_jitter(width = .2),alpha=0.6) +
+    theme(axis.title.x=element_blank(),  text = element_text(size=15),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())+
+      ggsignif::geom_signif(family = "Times New Roman",
+    comparisons = Dunnet$contrast,
+    annotations = Dunnet$stars,
+    y_position = c(105,100,95)
+  )
+```
+
+
+Distance moved
+```{r}
+
+Dunnet<- glht(anova_distance_moved, mcp(Genotype = "Dunnet")) %>%tidy() %>% 
+  mutate(contrast = str_split(contrast, " - "),
+         stars    = stars(adj.p.value))
+
+ggplot(data= df, aes(x=Genotype, y=distance)) +
+  geom_bar(stat = "summary",fun=mean, aes(color = Genotype,fill=Genotype), alpha = 0.01, size=1) +
+  geom_errorbar(stat="summary", fun.data=mean_se, width = 0.4, position = "dodge")+
+  theme(panel.background = element_rect(fill = "white"), axis.line = element_line(color="black"))+ 
+  ylab("Distance Traveled (cm)")+
+  theme(text = element_text(family = "Times New Roman"))+
+  scale_color_manual(values=color_palette)+
+  scale_fill_manual(values=color_palette)+
+  geom_jitter(position = position_jitter(width = .2),alpha=0.6) +
+    theme(axis.title.x=element_blank(),  text = element_text(size=15),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())+
+      ggsignif::geom_signif(family = "Times New Roman",
+    comparisons = Dunnet$contrast,
+    annotations = Dunnet$stars,
+    y_position = c(7000,6500,6000)
+  )
+```
+
+Tukey tests
+
+Distance moved
+#assumption tests
+
+```{r}
+p_load(car)
+
+#Independence
+#Should be okay
+
+#outliers - 1
+p_load(rstatix)
+outliers <- df %>%
+  group_by(Genotype) %>%
+  identify_outliers(`Distance moved cm`)
+
+#normality - holds
+by(df$`Distance moved cm`, df$Genotype, shapiro.test)
+
+#Homogeneity of variance - does not hold
+leveneTest(df$`Distance moved cm`, df$Genotype, center = mean)
+bartlett.test(distance ~Genotype, df)
+
+kruskal.test(df$`Distance moved cm` ~ Genotype, 
+             data = df)
+p_load(FSA)
+
+dunnTest(distance ~ Genotype, 
+             data = df,
+         method="bonferroni")
+```
+
+
+
+```{r}
+
+anova_distance_moved <- aov(df$distance ~ Genotype, data = df)
+summary(anova_distance_moved )
+
+TukeyHSD(anova_distance_moved , conf.level = 0.95)
+emmeans(anova_distance_moved,specs = trt.vs.ctrl~ Genotype)
+
+emm<-emmeans(anova_distance_moved, pairwise ~ Genotype, conf.level = 0.95)
+emm
+d_emm<- as.data.frame(test(emm)[2])
+
+
+anova_distance_moved <- TukeyHSD(anova_distance_moved, conf.level = 0.95)
+d_df<- as.data.frame(anova_distance_moved[1])
+colnames(d_df) <- c('Mean difference','CI lower','CI upper', 'Adjusted p value')
+
+d_df$SE <- d_emm$contrasts.SE
+d_df <- d_df[, c("Mean difference", "SE",'CI lower','CI upper', 'Adjusted p value')]
+
+
+```
+
+Make nice table of results
+```{r}
+p_load(knitr, kableExtra)
+d_df %>% kable("html", digits=4, caption = "<center>Distance Traveled (cm)</center>") %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, html_font = "Times New Roman")
+
+```
+
+Periphery preference
+
+#assumption tests
+
+```{r}
+p_load(car)
+
+#Independence
+#Should be okay
+
+#outliers - 3
+p_load(rstatix)
+outliers <- df %>%
+  group_by(Genotype) %>%
+  identify_outliers(periphery_preference)
+
+#normality - holds
+by(df$periphery_preference, df$Genotype, shapiro.test)
+
+#Homogeneity of variance - holds
+leveneTest(df$periphery_preference, df$Genotype, center = mean)
+
+kruskal.test(periphery_preference ~ Genotype, 
+             data = df)
+```
+
+
+
+```{r}
+
+anova_periphery_preference <- aov(periphery_preference ~ Genotype, data = df)
+summary(anova_periphery_preference)
+
+emmeans(anova_periphery_preference,specs = trt.vs.ctrl~ Genotype)
+TukeyHSD(anova_periphery_preference, conf.level = 0.95)
+
+emm<-emmeans(anova_periphery_preference, pairwise ~ Genotype, conf.level = 0.95)
+emm
+p_emm<- as.data.frame(test(emm)[2])
+
+
+Tukey_periphery <- TukeyHSD(anova_periphery_preference, conf.level = 0.95)
+p_df<- as.data.frame(Tukey_periphery[1])
+colnames(p_df) <- c('Mean difference','CI lower','CI upper', 'Adjusted p value')
+
+p_df$SE <- p_emm$contrasts.SE
+p_df <- p_df[, c("Mean difference", "SE",'CI lower','CI upper', 'Adjusted p value')]
+
+
+```
+
+
+Make nice table of results
+```{r}
+p_load(knitr, kableExtra)
+p_df %>% kable("html", digits=4, caption = "<center>Periphery Time Percentage</center>") %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, html_font = "Times New Roman")
+
+```
+
+Plots
+
+Set color palette for plots
+
+For the plots, colors from the palette 'GrandBudapest1' from the 'wesanderson' package (Karthik Ram and Hadley Wickham (2018). wesanderson: A Wes Anderson Palette Generator. R package
+  version 0.3.6. https://CRAN.R-project.org/package=wesanderson) were used, but colors re-ordered so the darkest color was applied to the WT mice
+```{r}
+color_palette = c("#5B1A18","#D67236","#FD6467", "#F1BB7B")
+```
+
+
+Preparing the ggsignif function to use Dunnet's p-values
+```{r}
+
+stars <- function(p) {
+  case_when(
+    p <= 0.001 ~ "***",
+    p <= 0.01  ~ "**",
+    p <= 0.05  ~ "*",
+    TRUE       ~ "ns"
+  )
+}
+
+```
+
+Distance moved
+```{r}
+p_load(broom, ggsignif, multcomp)
+
+anova_distance_moved <- aov(df$distance ~ Genotype, data = df)
+
+Dunnet<- glht(anova_distance_moved, mcp(Genotype = "Tukey")) %>%tidy() %>% 
+  mutate(contrast = str_split(contrast, " - "),
+         stars    = stars(adj.p.value))
+
+ggplot(data= df, aes(x=Genotype, y=df$`Distance moved cm`)) +
+  geom_bar(stat = "summary",fun=mean, aes(color = Genotype,fill=Genotype), alpha = 0.01, size=1) +
+  geom_errorbar(stat="summary", fun.data=mean_se, width = 0.4, position = "dodge")+
+  theme(panel.background = element_rect(fill = "white"), axis.line = element_line(color="black"))+ 
+  ylab("Distance Traveled (cm)")+
+  theme(text = element_text(family = "Times New Roman"))+
+  scale_color_manual(values=color_palette)+
+  scale_fill_manual(values=color_palette)+
+  geom_jitter(position = position_jitter(width = .2),alpha=0.6) +
+    theme(axis.title.x=element_blank(),  text = element_text(size=15),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())+
+      ggsignif::geom_signif(family = "Times New Roman",
+    comparisons = Dunnet$contrast,
+    annotations = Dunnet$stars,
+    y_position = c(8500,8000,7500,7000,6500,6000)
+  )
+```
+Periphery preference
+
+```{r}
+
+Dunnet<- glht(anova_periphery_preference, mcp(Genotype = "Tukey")) %>%tidy() %>% 
+  mutate(contrast = str_split(contrast, " - "),
+         stars    = stars(adj.p.value))
+
+ggplot(data= df, aes(x=Genotype, y=periphery_preference)) +
+  geom_bar(stat = "summary",fun=mean, aes(color = Genotype,fill=Genotype), alpha = 0.01, size=1) +
+  geom_errorbar(stat="summary", fun.data=mean_se, width = 0.4, position = "dodge")+
+  theme(panel.background = element_rect(fill = "white"), axis.line = element_line(color="black"))+ 
+  theme(text = element_text(family = "Times New Roman"))+
+  ylab("Periphery Time Percentage")+
+  scale_color_manual(values=color_palette)+
+  scale_fill_manual(values=color_palette)+
+  geom_jitter(position = position_jitter(width = .2),alpha=0.6) +
+    theme(axis.title.x=element_blank(),  text = element_text(size=15),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())+
+      ggsignif::geom_signif(family = "Times New Roman",
+    comparisons = Dunnet$contrast,
+    annotations = Dunnet$stars,
+    y_position = c(120,115,110,105,100,95)
+  )
+```
+

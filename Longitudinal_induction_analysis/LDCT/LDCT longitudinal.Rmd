@@ -1,0 +1,168 @@
+---
+title: "LDCT"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+date: '2022-12-05'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Load data
+```{r}
+setwd("~/Documents/TDP control files/Longitudinal induction analysis/LDCT/")
+# Loading
+library(pacman)
+p_load(readxl, tidyverse)
+p_load(broom, ggsignif, multcomp, emmeans)
+# xlsx files
+df <- read_excel("LDCT_longitudinal.xlsx")
+
+```
+
+
+Time spent in dark chamber:
+```{r}
+#light preference
+df<-  df %>% mutate(time_light=df$`In zone light cumulative s`)
+df<-  df %>% mutate(time_dark=600-df$`In zone light cumulative s`)
+
+#relative time spent in dark over light
+df<-  df %>% mutate(light_preference=(time_light/(time_light+time_dark))*100)
+```
+
+Data set where participants not completing all data collection time points are sorted out
+
+```{r}
+# Determine the weeks each participant should have
+required_weeks <- df %>% 
+  distinct(Week) %>% 
+  pull()
+
+# Count the number of weeks each participant has data for
+participant_week_counts <- df %>%
+  group_by(ID) %>%
+  summarize(week_count = n_distinct(Week))
+
+# Identify participants with data for all required weeks
+complete_participants <- participant_week_counts %>%
+  filter(week_count == length(required_weeks)) %>%
+  pull(ID)
+
+# Filter the dataset to include only complete participants
+df_complete <- df %>%
+  filter(ID %in% complete_participants)
+
+# View the new dataset
+head(df_complete)
+```
+
+Paired t-test
+
+```{r}
+
+#assumption checks
+p_load(rstatix)
+df_complete %>%
+  group_by(Week) %>%
+  identify_outliers(light_preference)
+
+by(df_complete$light_preference, df_complete$Week, shapiro.test)
+
+
+# Subset data for the two conditions
+preinduction <- df_complete %>% filter(Week == "Preinduction")
+postinduction <- df_complete %>% filter(Week == "1st week post induction")
+
+# Perform paired t-test
+t_test_result <- t.test(preinduction$light_preference, postinduction$light_preference, paired = TRUE)
+print(t_test_result)
+```
+
+plot
+
+```{r}
+
+
+df_complete$Week <- factor(df_complete$Week , levels = c("Preinduction","1st week post induction"))
+
+cbbPalette <- c("#fcfdbf", "#feca8d", "#D67236", "#f1605d", "#9e2f7f", "#440f76")
+
+p_load(ggbeeswarm, ggsignif)
+
+ggplot(df_complete, aes(x = Week, y = light_preference)) +
+  geom_beeswarm(data = df_complete, size = 2.5, aes(color = ID)) +
+#  geom_dotplot(aes(fill = ID, color = ID), binaxis = 'y', binwidth = 1,
+#               method = "histodot", stackratio = 1, dotsize = 0.5,
+#               stackgroups = TRUE, stackdir = "down", position = position_nudge(x = -.1)) +
+#  scale_fill_manual(values = cbbPalette) +
+#  scale_colour_manual(values = cbbPalette) +
+  ylab("light_preference") +
+  xlab("Timepoint") +
+  geom_signif(comparisons = list(c("Preinduction", "1st week post induction")),
+              map_signif_level = TRUE,
+              y_position = 60,
+              annotations = c("***")) +
+  geom_crossbar(stat = "summary", fun = mean, width = 0.2, fatten = 1.5) +
+  geom_errorbar(data = df_complete, stat = "summary", fun.data = mean_se, width = 0.1, position = "dodge") +
+  theme(text = element_text(size = 13))
+
+```
+
+LMM
+
+```{r}
+#Loading packages for linear mixed effects modelling
+library(lmerTest)
+library(lme4)
+
+df$Week <- factor(df$Week , levels = c("Preinduction","1st week post induction","2nd week post induction"))
+
+
+#creating a linear model of the same variables as included in the anova
+m_anova <-lmer(light_preference ~  Week + (1|ID), data=df)
+summary(m_anova)
+
+# Obtain estimated marginal means
+emmeans_results <- emmeans(m_anova, ~ Week)
+emmeans_results
+
+# Perform pairwise comparisons
+pairwise_results <- contrast(emmeans_results, method = "pairwise")
+
+# Display the results
+summary(pairwise_results)
+
+#bonferroni
+pwc <- pairs(emmeans_results, adjust = "bon")
+pwc
+```
+
+
+plot
+
+```{r}
+cbbPalette <- c("#fcfdbf", "#feca8d", "#D67236", "#f1605d", "#9e2f7f", "#440f76")
+
+p_load(ggbeeswarm, ggsignif)
+
+ggplot(df, aes(x = Week, y = light_preference)) +
+  geom_beeswarm(data = df, size = 2.5, aes(color = ID)) +
+#  geom_dotplot(aes(fill = ID, color = ID), binaxis = 'y', binwidth = 1,
+#               method = "histodot", stackratio = 1, dotsize = 0.5,
+#               stackgroups = TRUE, stackdir = "down", position = position_nudge(x = -.1)) +
+#  scale_fill_manual(values = cbbPalette) +
+#  scale_colour_manual(values = cbbPalette) +
+  ylab("light_preference") +
+  xlab("Timepoint") +
+  geom_signif(comparisons = list(c("Preinduction", "1st week post induction")),
+              map_signif_level = TRUE,
+              y_position = 60,
+              annotations = c("***")) +
+  geom_crossbar(stat = "summary", fun = mean, width = 0.2, fatten = 1.5) +
+  geom_errorbar(data = df, stat = "summary", fun.data = mean_se, width = 0.1, position = "dodge") +
+  theme(text = element_text(size = 13))
+
+```
