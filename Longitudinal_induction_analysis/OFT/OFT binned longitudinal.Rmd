@@ -1,0 +1,307 @@
+---
+title: "OFT"
+output:
+  pdf_document: default
+  html_document: default
+date: '2022-12-05'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Load data
+```{r}
+#setwd("~/Documents/TDP control files/Longitudinal induction analysis/OFT/")
+# Loading
+library(pacman)
+p_load(readxl, tidyverse)
+p_load(broom, ggsignif, multcomp, emmeans, DescTools)
+# xlsx files
+df <- read_excel("OFT_binned_longitudinal_data.xlsx")
+
+```
+
+
+
+We will look at two parameters:
+- how much time mouse spent moving (absolute and relative to total time) (measure of exploration)
+- how much time was spent on center compared to periphery (measure of anxiety, if anxious = more time spent in periphery)
+
+Time spent moving:
+```{r}
+# divide by time not spent moving
+df<-  df %>% mutate(relative_time_moving=(df$`Movement cumulative s`/(df$`Time not moving cumulative s`+df$`Movement cumulative s`))*100)
+```
+
+Periphery preference:
+
+```{r}
+df<-  df %>% mutate(periphery_preference=(`In zone periphery cumulative s`/(`In zone Center cumulative s`+`In zone periphery cumulative s`)*100))
+```
+
+
+
+Data set where participants not completing all data collection time points are sorted out
+
+```{r}
+# Determine the weeks each participant should have
+required_weeks <- df %>% 
+  distinct(Week) %>% 
+  pull()
+
+# Count the number of weeks each participant has data for
+participant_week_counts <- df %>%
+  group_by(ID) %>%
+  summarize(week_count = n_distinct(Week))
+
+# Identify participants with data for all required weeks
+complete_participants <- participant_week_counts %>%
+  filter(week_count == length(required_weeks)) %>%
+  pull(ID)
+
+# Filter the dataset to include only complete participants
+df_complete <- df %>%
+  filter(ID %in% complete_participants)
+
+# View the new dataset
+head(df_complete)
+```
+
+
+Distance
+
+From chatgpt - LMM approach with specific comparisons
+```{r}
+
+df$distance <- df$`Distance moved cm`
+df$Week <- factor(df$Week , levels = c("Preinduction","1st week post induction","2nd week post induction"))
+
+
+model <- lmer(distance ~ Week*Timebin + (1 | ID), data = df)
+#Compare First vs. Last 5 Minutes within Each Week
+emmeans(model, pairwise ~ Timebin | Week, adjust = "bonferroni")
+
+#Compare Distance Moved Across Weeks for Each Trial Period
+emmeans(model, pairwise ~ Week | Timebin, adjust = "bonferroni")
+
+#plot(emmeans(model, ~ Week * Timebin))
+
+```
+
+```{r}
+#p_load(performance)
+check_model(model)
+```
+
+```{r}
+# Ensure 'Week' and 'timebin' are factors with appropriate levels
+
+df$Timebin <- as.factor(df$Timebin)
+class(df$Timebin)
+#df$Timebin <- factor(df$Timebin, levels = c("Timebin 1", "Timebin 2"))
+
+# Load required packages
+p_load(ggbeeswarm, ggsignif)
+
+# Create the plot
+ggplot(df, aes(x = interaction(Week, Timebin), y = distance)) +
+  geom_beeswarm(size = 2.5, aes(color = ID)) +
+  ylab("Distance (cm)") +
+  xlab("Timepoint") +
+  
+  # Add significance comparisons
+  geom_signif(comparisons = list(c("Preinduction.Timebin 1", "1st week post induction.Timebin 1")),
+              map_signif_level = TRUE,
+              y_position = 4700,
+              annotations = c("0.0420")) +
+  geom_signif(comparisons = list(c("Preinduction.Timebin 1", "2nd week post induction.Timebin 1")),
+              map_signif_level = TRUE,
+              y_position = 5300,
+              annotations = c("0.0001")) +
+  geom_signif(comparisons = list(c("1st week post induction.Timebin 1", "2nd week post induction.Timebin 1")),
+              map_signif_level = TRUE,
+              y_position = 5000,
+              annotations = c("0.0899")) +
+  
+    geom_signif(comparisons = list(c("Preinduction.Timebin 2", "1st week post induction.Timebin 2")),
+              map_signif_level = TRUE,
+              y_position = 4700,
+              annotations = c("0.0822")) +
+  geom_signif(comparisons = list(c("Preinduction.Timebin 2", "2nd week post induction.Timebin 2")),
+              map_signif_level = TRUE,
+              y_position = 5300,
+              annotations = c("0.0005")) +
+  geom_signif(comparisons = list(c("1st week post induction.Timebin 2", "2nd week post induction.Timebin 2")),
+              map_signif_level = TRUE,
+              y_position = 5000,
+              annotations = c("0.1315")) +
+
+  # Add mean and error bars
+  geom_crossbar(stat = "summary", fun = mean, width = 0.2, fatten = 1.5) +
+  geom_errorbar(stat = "summary", fun.data = mean_se, width = 0.1, position = position_dodge(width = 0.75)) +
+  
+  # Improve theme
+  theme(text = element_text(size = 13),
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(1000, 6000)
+
+```
+
+```{r}
+# Ensure 'Week' and 'Timebin' are factors
+df$Week <- factor(df$Week, levels = c("Preinduction", "1st week post induction", "2nd week post induction"))
+df$Timebin <- factor(df$Timebin, levels = c("Timebin 1", "Timebin 2"))
+
+# Load required packages
+p_load(ggbeeswarm, ggsignif)
+
+# Create the plot
+ggplot(df, aes(x = interaction(Timebin, Week, sep = " "), y = distance)) +
+  geom_beeswarm(size = 2.5, aes(color = ID)) +
+  ylab("Distance (cm)") +
+  xlab("Timepoint") +
+  
+  # Add significance comparisons
+  geom_signif(comparisons = list(c("Timebin 1 Preinduction", "Timebin 2 Preinduction")),
+              map_signif_level = TRUE,
+              y_position = 4700,
+              annotations = c("0.1136")) +
+  geom_signif(comparisons = list(c("Timebin 1 1st week post induction", "Timebin 2 1st week post induction")),
+              map_signif_level = TRUE,
+              y_position = 5000,
+              annotations = c("0.0647")) +
+  geom_signif(comparisons = list(c("Timebin 1 2nd week post induction", "Timebin 2 2nd week post induction")),
+              map_signif_level = TRUE,
+              y_position = 5300,
+              annotations = c("0.0735")) +
+  
+  # Add mean and error bars
+  geom_crossbar(stat = "summary", fun = mean, width = 0.2, fatten = 1.5, position = position_dodge(width = 0.75)) +
+  geom_errorbar(stat = "summary", fun.data = mean_se, width = 0.1, position = position_dodge(width = 0.75)) +
+  
+  # Improve theme
+  theme(text = element_text(size = 13),
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+    ylim(1000, 6000)
+
+```
+
+
+Periphery preference
+
+From chatgpt - LMM approach with specific comparisons
+```{r}
+
+
+df$Week <- factor(df$Week , levels = c("Preinduction","1st week post induction","2nd week post induction"))
+
+
+model <- lmer(periphery_preference ~ Week*Timebin + (1 | ID), data = df)
+#Compare First vs. Last 5 Minutes within Each Week
+emmeans(model, pairwise ~ Timebin | Week, adjust = "bonferroni")
+
+#Compare Distance Moved Across Weeks for Each Trial Period
+emmeans(model, pairwise ~ Week | Timebin, adjust = "bonferroni")
+
+#plot(emmeans(model, ~ Week * Timebin))
+
+```
+```{r}
+#p_load(performance)
+check_model(model)
+```
+
+```{r}
+# Ensure 'Week' and 'timebin' are factors with appropriate levels
+
+df$Timebin <- as.factor(df$Timebin)
+class(df$Timebin)
+#df$Timebin <- factor(df$Timebin, levels = c("Timebin 1", "Timebin 2"))
+
+# Load required packages
+p_load(ggbeeswarm, ggsignif)
+
+# Create the plot
+ggplot(df, aes(x = interaction(Week, Timebin), y = periphery_preference)) +
+  geom_beeswarm(size = 2.5, aes(color = ID)) +
+  ylab("Periphery preference") +
+  xlab("Timepoint") +
+  
+  # Add significance comparisons
+  geom_signif(comparisons = list(c("Preinduction.Timebin 1", "1st week post induction.Timebin 1")),
+              map_signif_level = TRUE,
+              y_position = 100,
+              annotations = c("<.0001")) +
+  geom_signif(comparisons = list(c("Preinduction.Timebin 1", "2nd week post induction.Timebin 1")),
+              map_signif_level = TRUE,
+              y_position = 110,
+              annotations = c("<.0001")) +
+  geom_signif(comparisons = list(c("1st week post induction.Timebin 1", "2nd week post induction.Timebin 1")),
+              map_signif_level = TRUE,
+              y_position = 120,
+              annotations = c("1.0000")) +
+  
+    geom_signif(comparisons = list(c("Preinduction.Timebin 2", "1st week post induction.Timebin 2")),
+              map_signif_level = TRUE,
+              y_position = 100,
+              annotations = c("0.0035")) +
+  geom_signif(comparisons = list(c("Preinduction.Timebin 2", "2nd week post induction.Timebin 2")),
+              map_signif_level = TRUE,
+              y_position = 110,
+              annotations = c("<.0001")) +
+  geom_signif(comparisons = list(c("1st week post induction.Timebin 2", "2nd week post induction.Timebin 2")),
+              map_signif_level = TRUE,
+              y_position = 120,
+              annotations = c("0.1926")) +
+
+  # Add mean and error bars
+  geom_crossbar(stat = "summary", fun = mean, width = 0.2, fatten = 1.5) +
+  geom_errorbar(stat = "summary", fun.data = mean_se, width = 0.1, position = position_dodge(width = 0.75)) +
+  
+  # Improve theme
+  theme(text = element_text(size = 13),
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+   ylim(60,125)
+
+```
+
+```{r}
+# Ensure 'Week' and 'Timebin' are factors
+df$Week <- factor(df$Week, levels = c("Preinduction", "1st week post induction", "2nd week post induction"))
+df$Timebin <- factor(df$Timebin, levels = c("Timebin 1", "Timebin 2"))
+
+# Load required packages
+p_load(ggbeeswarm, ggsignif)
+
+# Create the plot
+ggplot(df, aes(x = interaction(Timebin, Week, sep = " "), y = periphery_preference)) +
+  geom_beeswarm(size = 2.5, aes(color = ID)) +
+  ylab("Periphery Preference") +
+  xlab("Timepoint") +
+  
+  # Add significance comparisons
+  geom_signif(comparisons = list(c("Timebin 1 Preinduction", "Timebin 2 Preinduction")),
+              map_signif_level = TRUE,
+              y_position = 100,
+              annotations = c("0.1517")) +
+  geom_signif(comparisons = list(c("Timebin 1 1st week post induction", "Timebin 2 1st week post induction")),
+              map_signif_level = TRUE,
+              y_position = 110,
+              annotations = c("0.1345")) +
+  geom_signif(comparisons = list(c("Timebin 1 2nd week post induction", "Timebin 2 2nd week post induction")),
+              map_signif_level = TRUE,
+              y_position = 120,
+              annotations = c("0.7236")) +
+  
+  # Add mean and error bars
+  geom_crossbar(stat = "summary", fun = mean, width = 0.2, fatten = 1.5, position = position_dodge(width = 0.75)) +
+  geom_errorbar(stat = "summary", fun.data = mean_se, width = 0.1, position = position_dodge(width = 0.75)) +
+  
+  # Improve theme
+  theme(text = element_text(size = 13),
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(60,125)
+
+```

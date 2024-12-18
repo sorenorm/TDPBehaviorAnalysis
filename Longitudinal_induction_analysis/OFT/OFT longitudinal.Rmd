@@ -160,10 +160,12 @@ pwc
 ```{r}
 cbbPalette <- c("#fcfdbf", "#feca8d", "#D67236", "#f1605d", "#9e2f7f", "#440f76")
 
+df_complete$Week <- factor(df_complete$Week , levels = c("Preinduction","1st week post induction","2nd week post induction"))
+
 p_load(ggbeeswarm, ggsignif)
 
-ggplot(df, aes(x = Week, y = distance)) +
-  geom_beeswarm(data = df, size = 2.5, aes(color = ID)) +
+ggplot(df_complete, aes(x = Week, y = distance)) +
+  geom_beeswarm(data = df_complete, size = 2.5, aes(color = ID)) +
 #  geom_dotplot(aes(fill = ID, color = ID), binaxis = 'y', binwidth = 1,
 #               method = "histodot", stackratio = 1, dotsize = 0.5,
 #               stackgroups = TRUE, stackdir = "down", position = position_nudge(x = -.1)) +
@@ -178,13 +180,13 @@ ggplot(df, aes(x = Week, y = distance)) +
   geom_signif(comparisons = list(c("Preinduction", "2nd week post induction")),
               map_signif_level = TRUE,
               y_position = 8400,
-              annotations = c("**")) +
+              annotations = c("*")) +
   geom_signif(comparisons = list(c("1st week post induction", "2nd week post induction")),
               map_signif_level = TRUE,
               y_position = 8000,
               annotations = c("ns")) +
   geom_crossbar(stat = "summary", fun = mean, width = 0.2, fatten = 1.5) +
-  geom_errorbar(data = df, stat = "summary", fun.data = mean_se, width = 0.1, position = "dodge") +
+  geom_errorbar(data = df_complete, stat = "summary", fun.data = mean_se, width = 0.1, position = "dodge") +
   theme(text = element_text(size = 13))
 
 ```
@@ -354,7 +356,7 @@ summary(pairwise_results)
 pwc <- pairs(emmeans_results, adjust = "bon")
 pwc
 ```
-
+LMM
 ```{r}
 cbbPalette <- c("#fcfdbf", "#feca8d", "#D67236", "#f1605d", "#9e2f7f", "#440f76")
 
@@ -386,6 +388,8 @@ ggplot(df, aes(x = Week, y = periphery_preference)) +
   theme(text = element_text(size = 13))
 
 ```
+
+
 
 Assumption checks for this approach
 
@@ -442,7 +446,7 @@ Imputation Methods: Ensure proper handling of missing data, especially if the da
 
 Friedman test
 ```{r}
-friedman.test(y = df$distance, groups = df$Week, blocks = df$ID)
+#friedman.test(y = df$distance, groups = df$Week, blocks = df$ID)
 
 ```
 ```{r}
