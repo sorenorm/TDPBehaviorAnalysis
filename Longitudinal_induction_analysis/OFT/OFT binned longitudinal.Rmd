@@ -78,6 +78,7 @@ From chatgpt - LMM approach with specific comparisons
 df$distance <- df$`Distance moved cm`
 df$Week <- factor(df$Week , levels = c("Preinduction","1st week post induction","2nd week post induction"))
 
+p_load(lme4)
 
 model <- lmer(distance ~ Week*Timebin + (1 | ID), data = df)
 #Compare First vs. Last 5 Minutes within Each Week
@@ -91,7 +92,7 @@ emmeans(model, pairwise ~ Week | Timebin, adjust = "bonferroni")
 ```
 
 ```{r}
-#p_load(performance)
+p_load(performance)
 check_model(model)
 ```
 
@@ -305,3 +306,93 @@ ggplot(df, aes(x = interaction(Timebin, Week, sep = " "), y = periphery_preferen
   ylim(60,125)
 
 ```
+
+```{r}
+df %>% 
+  ggplot(aes(x = (distance), fill = Timebin)) +
+  geom_density(alpha = 0.6) +
+  theme_minimal()
+
+df %>% 
+  ggplot(aes(x = sqrt(distance), fill = Timebin)) +
+  geom_density(alpha = 0.6) +
+  theme_minimal()
+
+df %>% 
+  ggplot(aes(x = log(distance), fill = Timebin)) +
+  geom_density(alpha = 0.6) +
+  theme_minimal()
+
+
+
+df %>% 
+  ggplot(aes(x = distance, fill = Week)) +
+  geom_density(alpha = 0.6) +
+  theme_minimal()
+
+df %>% 
+  ggplot(aes(x = distance, fill = Timebin)) +
+  geom_density(alpha = 0.6) +
+  theme_minimal() +
+  facet_wrap(~Week)
+
+df %>% 
+  ggplot(aes(x = distance, fill = Week)) +
+  geom_density(alpha = 0.6) +
+  theme_minimal() +
+  facet_wrap(~Timebin)
+
+
+
+
+```
+
+
+```{r}
+df %>%
+  mutate(week_timebin = paste0(Week, Timebin),
+         week_timebin = factor(week_timebin, levels = c('PreinductionTimebin 1', 
+                                                        'PreinductionTimebin 2',
+                                                        '1st week post inductionTimebin 1', 
+                                                        '1st week post inductionTimebin 2',
+                                                        '2nd week post inductionTimebin 1', 
+                                                        '2nd week post inductionTimebin 2'))) %>% 
+  ggplot(aes(x = week_timebin, y = distance)) +
+  geom_point(aes(color = ID)) +
+  geom_line(aes(group = ID))
+
+df %>%
+  group_by(ID, Week) %>% 
+  summarise(distance = sum(distance)) %>% 
+  ggplot(aes(x = Week, y = distance)) +
+  geom_point(aes(color = ID)) +
+  geom_line(aes(group = ID)) +
+  scale_color_brewer(palette = "Set1")
+
+df %>%
+  group_by(ID, Week) %>%
+  summarise(distance = sum(distance), .groups = "drop") %>%
+  group_by(ID) %>%
+  mutate(distance = distance - first(distance)) %>% # Subtract the starting value
+  ggplot(aes(x = Week, y = distance)) +
+  geom_point(aes(color = ID)) +
+  geom_line(aes(group = ID))+
+  scale_color_brewer(palette = "Set1")
+```
+
+```{r}
+m1 = lmerTest::lmer(data = df %>% group_by(ID, Week) %>% summarise(distance = sum(distance), .groups = "drop"),
+     formula = sqrt(distance) ~ Week + (1|ID))
+
+summary(m1)
+
+p_load(sjPlot, effects)
+#Try with model_plot (argument for type can be varied)
+plot_model(m1, type='diag')
+
+```
+
+
+
+
+
